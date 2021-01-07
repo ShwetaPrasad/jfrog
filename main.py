@@ -1,6 +1,7 @@
 import argparse
 import requests
 import json 
+
 from configparser import ConfigParser
 
 class Artifactory():
@@ -10,79 +11,62 @@ class Artifactory():
 
         self.headers = {'X-JFrog-Art-Api': self.config['DEFAULT']['APIKEY']}
         self.baseurl = self.config['DEFAULT']['BASEURL']
+
+        self.actionurl = self.baseurl + self.config['ENDPOINT']['CREATEORREPLACEUSER']
         
-    def make_request(self, action, data=None):
+    def make_request(self, args):
+        """ 
+        Depending on the type of action passed as argunment the user will be created/updated/deleted
+        """
+        action = args.pop('action')
         is_action_valid = True
         response = None
 
         if action == 'create_user':
                 verb = 'PUT'
-                url = self.baseurl + self.config['ENDPOINT']['CREATEORREPLACEUSER']
+                url = self.actionurl + args['username']
+                response = f"Creating user {args['username']}: "
         elif action == 'update_user':
                 verb = 'POST'
-                url = self.baseurl + self.config['ENDPOINT']['CREATEORREPLACEUSER']
+                url = self.actionurl + args['username']
+                response = f"Updating user {args['username']}: "
         elif action == 'validate_user':
                 verb = 'GET'
-                url = self.baseurl + self.config['ENDPOINT']['CREATEORREPLACEUSER']
+                url = self.actionurl + args['username']
+                response = f"Validating user {args['username']}: "
         elif action == 'delete_user':
                 verb = 'DELETE'
-                url = self.baseurl + self.config['ENDPOINT']['CREATEORREPLACEUSER']
+                url = self.actionurl + args['username']
+                response = f"Deleting user {args['username']}: "
         else:
             is_action_valid = False
             response = 'Invalid action'
 
         if is_action_valid:
-            resp = requests.request(verb, url=url, data=json.dumps(data), headers=self.headers)
+            resp = requests.request(verb, url=url, data=json.dumps(args), headers=self.headers)
             
-            if resp.status_code in [200, 201]:
-                response = 'success'
-            elif resp.status_code in [404]:
-                response = 'not found'
+            if resp.status_code == 200:
+                response += resp.text
+            elif resp.status_code == 201:
+                response += 'success'
+            elif resp.status_code == 404:
+                response += 'not found'
             else:
-                response = f'Status Code: {resp.status_code}, Message: {resp.text}'
+                response += f'Status Code: {resp.status_code}, Message: {resp.text}'
                
-        return response
-
-    def create_user(self):
-        data = {
-            "email" : "devuser@jfrog.com",
-            "password": "Password1"
-        }
-        response = self.make_request(action="create_user", data=data)
-
-        print(f"User creation: {response}")
-
-
-    def update_user(self):
-        data = {
-            "email" : "devuser@jfrog.com",
-            "password": "Password1",
-            "admin": True
-        }
-
-        response = self.make_request(action="update_user", data=data)
-        print(f'Updating user privileges: {response}')     
-
-
-    def validate_user(self):
-        data = {
-            "email" : "devuser@jfrog.com",
-            "password": "Password1"
-        }
+        print(response)
         
-        response = self.make_request(action="validate_user")
-        print(f'Validating user: {response}')
-    
-    def delete_user(self):
-        response = self.make_request(action="delete_user")
-        print(f'Deleting user: {response}')
-        
-
 
 if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(description='Onboard/Deboard User')
+    parser.add_argument('--action', help='ACTION: create_user/update_user/validate_user/delete_user', required=True)
+    parser.add_argument('--username', required=True)
+    parser.add_argument('--password')
+    parser.add_argument('--email')
+    parser.add_argument('--admin', help='Default: False', action='store_true')
+
+    args = parser.parse_args().__dict__
+
     art = Artifactory()
-    art.create_user()
-    art.update_user()
-    art.validate_user()
-    art.delete_user()
-    art.validate_user()
+    art.make_request(args)
